@@ -1,4 +1,4 @@
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   namespace: kube-system
@@ -18,13 +18,6 @@ spec:
       nodeSelector:
         kubernetes.io/role: node
       volumes:
-        - name: ssl-certs
-          hostPath:
-            # for AWS linux or RHEL distros
-            # path: /etc/pki/ca-trust/extracted/pem/
-            # debian or ubuntu distros
-            # path: /etc/ssl/certs
-            path: /usr/share/ca-certificates
         - name: tls
           secret:
             secretName: kiam-agent-tls

@@ -1,5 +1,5 @@
 ---
-apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   namespace: kube-system
@@ -17,19 +17,12 @@ spec:
       serviceAccountName: kiam-server
       nodeSelector:
         kubernetes.io/role: master
-      # kops master nodes requires this tolerations
-      # tolerations:
-      # - key: "node-role.kubernetes.io/master"
-      #   effect: "NoSchedule"
-      #   operator: "Exists"        
+      # kops and kubeadm provisioned control plane nodes require this toleration
+       tolerations:
+       - key: "node-role.kubernetes.io/master"
+         effect: "NoSchedule"
+         operator: "Exists"
       volumes:
-        - name: ssl-certs
-          hostPath:
-            # for AWS linux or RHEL distros
-            # path: /etc/pki/ca-trust/extracted/pem/
-            # debian or ubuntu distros
-            # path: /etc/ssl/certs
-            path: /usr/share/ca-certificates
         - name: tls
           secret:
             secretName: kiam-server-tls
