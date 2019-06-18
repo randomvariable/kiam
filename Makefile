@@ -8,6 +8,7 @@ IMG_NAMESPACE?=quay.io/uswitch
 IMG_TAG?=$(GIT_BRANCH)
 REGISTRY?=$(IMG_NAMESPACE)/$(NAME)
 SOURCES := $(shell find . -iname '*.go') proto/service.pb.go
+export PATH := bin:$(PATH)
 
 .PHONY: test clean all coverage
 
@@ -19,9 +20,42 @@ $(BIN_DARWIN): $(SOURCES)
 $(BIN_LINUX): $(SOURCES)
 	GOARCH=$(ARCH) GOOS=linux CGO_ENABLED=0 go build -o $(BIN_LINUX) cmd/kiam/*.go
 
-proto/service.pb.go: proto/service.proto
-	go get -u -v github.com/golang/protobuf/protoc-gen-go
+.PHONY: generate
+generate: clientset ## Generate code
+	go generate ./pkg/... ./cmd/...
+
+.PHONY: clientset
+clientset: ## Generate a typed clientset
+	rm -rf pkg/client
+	cd ./vendor/k8s.io/code-generator/cmd && go install ./client-gen ./lister-gen ./informer-gen
+	$$GOPATH/bin/client-gen --clientset-name clientset --input-base github.com/uswitch/kiam/pkg/apis \
+		--input iam/v1alpha1 --output-package github.com/uswitch/kiam/pkg/k8s/client/clientset_generated \
+		--go-header-file=./hack/boilerplate.go.txt
+	$$GOPATH/bin/lister-gen --input-dirs github.com/uswitch/kiam/pkg/apis/iam/v1alpha1 \
+		--output-package github.com/uswitch/kiam/pkg/k8s/client/listers_generated \
+		--go-header-file=./hack/boilerplate.go.txt
+	$$GOPATH/bin/informer-gen --input-dirs github.com/uswitch/kiam/pkg/apis/iam/v1alpha1 \
+		--versioned-clientset-package github.com/uswitch/kiam/pkg/k8s/client/clientset_generated/clientset \
+		--listers-package github.com/uswitch/kiam/pkg/k8s/client/listers_generated \
+		--output-package github.com/uswitch/kiam/pkg/k8s/client/informers_generated \
+		--go-header-file=./hack/boilerplate.go.txt
+
+deps:
+	dep ensure
+
+bin:
+	mkdir -p bin
+
+bin/protoc-gen-go: bin
+	go build -o bin/protoc-gen-go ./vendor/github.com/golang/protobuf/protoc-gen-go
+
+proto/service.pb.go: proto/service.proto bin/protoc-gen-go
 	protoc -I proto/ proto/service.proto --go_out=plugins=grpc:proto
+
+.PHONY: manifests
+manifests: ## Generate manifests e.g. CRD, RBAC etc.
+	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go crd
+	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go rbac --name kiam --service-account kiam-server --service-account-namespace kube-system
 
 test: $(SOURCES)
 	go test github.com/uswitch/kiam/pkg/... -race
@@ -37,6 +71,9 @@ bench: $(SOURCES)
 
 docker: Dockerfile
 	docker image build -t "$(REGISTRY):$(IMG_TAG)" .
+
+push:
+	docker push "$(REGISTRY):$(IMG_TAG)"
 
 clean:
 	rm -rf bin/

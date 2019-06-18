@@ -24,6 +24,14 @@
 #   go-tests = true
 #   unused-packages = true
 
+required = [
+"github.com/golang/protobuf/protoc-gen-go",
+"sigs.k8s.io/controller-tools/cmd/controller-gen", # for crd/rbac generation
+"k8s.io/code-generator/cmd/deepcopy-gen", # for go generate
+"k8s.io/code-generator/cmd/client-gen", # for go generate
+"k8s.io/code-generator/cmd/informer-gen", # for go generate
+"k8s.io/code-generator/cmd/lister-gen", # for go generate
+]
 
 [[constraint]]
   name = "github.com/aws/aws-sdk-go"
@@ -69,7 +77,7 @@
   name = "github.com/vmg/backoff"
   version = "1.0.0"
 
-[[constraint]]
+[[override]]
   branch = "master"
   name = "golang.org/x/net"
 
@@ -83,15 +91,15 @@
 
 [[constraint]]
   name = "k8s.io/api"
-  version = "kubernetes-1.10.3"
+  version = "kubernetes-1.13.4"
 
 [[constraint]]
   name = "k8s.io/apimachinery"
-  version = "kubernetes-1.10.3"
+  version = "kubernetes-1.13.4"
 
 [[constraint]]
   name = "k8s.io/client-go"
-  version = "7.0.0"
+  version = "10.0.0"
 
 [prune]
   go-tests = true
