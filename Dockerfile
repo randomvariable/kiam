@@ -1,5 +1,5 @@
 FROM golang:1.10-alpine3.8 as build
-RUN apk add --no-cache make
+RUN apk add --no-cache make protobuf
 WORKDIR /go/src/github.com/uswitch/kiam
 ADD . .
 RUN make bin/kiam-linux-amd64
