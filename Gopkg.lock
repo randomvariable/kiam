@@ -92,6 +92,14 @@
   version = "v1.1.1"
 
 [[projects]]
+  digest = "1:ac425d784b13d49b37a5bbed3ce022677f8f3073b216f05d6adcb9303e27fa0f"
+  name = "github.com/evanphx/json-patch"
+  packages = ["."]
+  pruneopts = "UT"
+  revision = "026c730a0dcc5d11f93f1cf1cc65b01247ea7b6f"
+  version = "v4.5.0"
+
+[[projects]]
   digest = "1:547f5df5f708c880f0af507317c8d022b8d62053a5cb075e23c6eeed09eb2e4e"
   name = "github.com/fortytw2/leaktest"
   packages = ["."]
@@ -752,10 +760,11 @@
   version = "kubernetes-1.13.4"
 
 [[projects]]
-  digest = "1:3e8c6679f32bc2d10215e14d2be3dce737486d602d689f5a0adf44197476e2b8"
+  digest = "1:ec18004c7b610254b5b578366a339c1fa37b1fd3ef6b40d488822fbeb2ae3967"
   name = "k8s.io/client-go"
   packages = [
     "discovery",
+    "discovery/fake",
     "kubernetes",
     "kubernetes/scheme",
     "kubernetes/typed/admissionregistration/v1alpha1",
@@ -797,6 +806,7 @@
     "plugin/pkg/client/auth/exec",
     "rest",
     "rest/watch",
+    "testing",
     "tools/auth",
     "tools/cache",
     "tools/cache/testing",
@@ -822,8 +832,7 @@
   version = "v10.0.0"
 
 [[projects]]
-  branch = "master"
-  digest = "1:28fa79f89ff35ac66c375218720eb8c8f04ab0793fa1749d06e3cbf367ba9f40"
+  digest = "1:2d4e25d510d99febad7145a01c6fe92037e39cae579d5fc0e23963f7a96d350c"
   name = "k8s.io/code-generator"
   packages = [
     "cmd/client-gen",
@@ -842,11 +851,11 @@
     "cmd/lister-gen",
     "cmd/lister-gen/args",
     "cmd/lister-gen/generators",
-    "pkg/namer",
     "pkg/util",
   ]
   pruneopts = "UT"
-  revision = "c522cb6c26aa2131f529d6e47b83fefd00bc9198"
+  revision = "c2090bec4d9b1fb25de3812f868accc2bc9ecbae"
+  version = "kubernetes-1.13.4"
 
 [[projects]]
   branch = "master"
@@ -947,16 +956,28 @@
     "gopkg.in/alecthomas/kingpin.v2",
     "gopkg.in/alexcesaro/statsd.v2",
     "k8s.io/api/core/v1",
+    "k8s.io/apimachinery/pkg/api/errors",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/fields",
+    "k8s.io/apimachinery/pkg/labels",
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/runtime/schema",
+    "k8s.io/apimachinery/pkg/runtime/serializer",
+    "k8s.io/apimachinery/pkg/types",
+    "k8s.io/apimachinery/pkg/util/runtime",
+    "k8s.io/apimachinery/pkg/watch",
+    "k8s.io/client-go/discovery",
+    "k8s.io/client-go/discovery/fake",
     "k8s.io/client-go/kubernetes",
     "k8s.io/client-go/kubernetes/scheme",
     "k8s.io/client-go/kubernetes/typed/core/v1",
+    "k8s.io/client-go/rest",
+    "k8s.io/client-go/testing",
     "k8s.io/client-go/tools/cache",
     "k8s.io/client-go/tools/cache/testing",
+    "k8s.io/client-go/tools/clientcmd",
     "k8s.io/client-go/tools/record",
+    "k8s.io/client-go/util/flowcontrol",
     "k8s.io/code-generator/cmd/client-gen",
     "k8s.io/code-generator/cmd/deepcopy-gen",
     "k8s.io/code-generator/cmd/informer-gen",

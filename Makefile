@@ -22,19 +22,21 @@ $(BIN_LINUX): $(SOURCES)
 
 .PHONY: generate
 generate: clientset ## Generate code
-	go generate ./pkg/... ./cmd/...
+#	go generate ./pkg/... ./cmd/...
 
 .PHONY: clientset
 clientset: ## Generate a typed clientset
-	rm -rf pkg/client
-	cd ./vendor/k8s.io/code-generator/cmd && go install ./client-gen ./lister-gen ./informer-gen
-	$$GOPATH/bin/client-gen --clientset-name clientset --input-base github.com/uswitch/kiam/pkg/apis \
+	rm -rf pkg/k8s/client/*_generated
+	go run ./vendor/k8s.io/code-generator/cmd/deepcopy-gen --input-dirs github.com/uswitch/kiam/pkg/apis/iam/v1alpha1 \
+		--output-package github.com/uswitch/kiam/pkg/apis/iam/v1alpha1 \
+		--go-header-file=./hack/boilerplate.go.txt
+	go run ./vendor/k8s.io/code-generator/cmd/client-gen --clientset-name clientset --input-base github.com/uswitch/kiam/pkg/apis \
 		--input iam/v1alpha1 --output-package github.com/uswitch/kiam/pkg/k8s/client/clientset_generated \
 		--go-header-file=./hack/boilerplate.go.txt
-	$$GOPATH/bin/lister-gen --input-dirs github.com/uswitch/kiam/pkg/apis/iam/v1alpha1 \
+	go run ./vendor/k8s.io/code-generator/cmd/lister-gen --input-dirs github.com/uswitch/kiam/pkg/apis/iam/v1alpha1 \
 		--output-package github.com/uswitch/kiam/pkg/k8s/client/listers_generated \
 		--go-header-file=./hack/boilerplate.go.txt
-	$$GOPATH/bin/informer-gen --input-dirs github.com/uswitch/kiam/pkg/apis/iam/v1alpha1 \
+	go run ./vendor/k8s.io/code-generator/cmd/informer-gen --input-dirs github.com/uswitch/kiam/pkg/apis/iam/v1alpha1 \
 		--versioned-clientset-package github.com/uswitch/kiam/pkg/k8s/client/clientset_generated/clientset \
 		--listers-package github.com/uswitch/kiam/pkg/k8s/client/listers_generated \
 		--output-package github.com/uswitch/kiam/pkg/k8s/client/informers_generated \

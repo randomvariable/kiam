@@ -19,7 +19,6 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-	v1 "k8s.io/api/core/v1"
 	"github.com/uswitch/kiam/pkg/apis/iam/v1alpha1"
 	"k8s.io/client-go/tools/cache"
 )
@@ -38,7 +37,7 @@ type IamRoleCache struct {
 func NewIamRoleCache(source cache.ListerWatcher, syncInterval time.Duration, bufferSize int) *IamRoleCache {
 	indexers := cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}
 	iamRoles := make(chan *v1alpha1.IamRole, bufferSize)
-	iamRoleHandler := &podHandler{pods}
+	iamRoleHandler := &iamRoleHandler{iamRoles: iamRoles}
 	indexer, controller := cache.NewIndexerInformer(source, &v1alpha1.IamRole{}, syncInterval, iamRoleHandler, indexers)
 	iamRoleCache := &IamRoleCache{
 		iamRoles:   iamRoles,
@@ -126,7 +125,7 @@ func (o *iamRoleHandler) OnDelete(obj interface{}) {
 }
 
 func (o *iamRoleHandler) OnUpdate(old, new interface{}) {
-	iamRole, isIamRole := obj.(*v1alpha1.IamRole)
+	iamRole, isIamRole := old.(*v1alpha1.IamRole)
 	if !isIamRole {
 		log.Errorf("OnUpdate unexpected object: %+v", new)
 		return
