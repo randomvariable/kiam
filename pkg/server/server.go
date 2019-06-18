@@ -23,7 +23,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/grpc-ecosystem/go-grpc-prometheus"
+	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
 	log "github.com/sirupsen/logrus"
 	"github.com/uswitch/k8sc/official"
 	"github.com/uswitch/kiam/pkg/aws/sts"
@@ -33,13 +33,18 @@ import (
 	pb "github.com/uswitch/kiam/proto"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
+	iamV1alpha1client "github.com/uswitch/kiam/pkg/k8s/client"
 )
+
+// +kubebuilder:rbac:groups=iam.amazonaws.com,resources=roles,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces;pods,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=events,verbs=create;patch
 
 // Config controls the setup of the gRPC server
 type Config struct {
@@ -71,6 +76,7 @@ type KiamServer struct {
 	server              *grpc.Server
 	pods                *k8s.PodCache
 	namespaces          *k8s.NamespaceCache
+	iamRoles 			*k8s.IamRoleCache
 	eventRecorder       record.EventRecorder
 	manager             *prefetch.CredentialManager
 	credentialsProvider sts.CredentialsProvider
@@ -229,8 +235,11 @@ func NewServer(config *Config) (*KiamServer, error) {
 		log.Fatalf("couldn't create kubernetes client: %s", err.Error())
 	}
 
-	server.pods = k8s.NewPodCache(k8s.NewListWatch(client, k8s.ResourcePods), config.PodSyncInterval, config.PrefetchBufferSize)
-	server.namespaces = k8s.NewNamespaceCache(k8s.NewListWatch(client, k8s.ResourceNamespaces), time.Minute)
+	iamClient, err := iamV1alpha1client.NewClient(config.KubeConfig)
+
+	server.pods = k8s.NewPodCache(k8s.NewCoreV1ListWatch(client, k8s.ResourcePods), config.PodSyncInterval, config.PrefetchBufferSize)
+	server.namespaces = k8s.NewNamespaceCache(k8s.NewCoreV1ListWatch(client, k8s.ResourceNamespaces), time.Minute)
+	server.iamRoles = k8s.NewIamRoleCache(k8s.NewIamV1Alpha1ListWatch(iamClient, k8s.ResourceIamRoles), config.PodSyncInterval, config.PrefetchBufferSize)
 	server.eventRecorder = eventRecorder(client)
 
 	stsGateway, err := sts.DefaultGateway(config.AssumeRoleArn, config.Region)
