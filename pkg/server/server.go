@@ -266,9 +266,6 @@ func NewServer(config *Config) (*KiamServer, error) {
 		return nil, err
 	}
 	certPool := x509.NewCertPool()
-	if err != nil {
-		return nil, err
-	}
 	ca, err := ioutil.ReadFile(config.TLS.CA)
 	if err != nil {
 		return nil, err
