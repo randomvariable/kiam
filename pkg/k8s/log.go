@@ -15,6 +15,7 @@ package k8s
 
 import (
 	"github.com/sirupsen/logrus"
+	"github.com/uswitch/kiam/pkg/apis/iam/v1alpha1"
 	"k8s.io/api/core/v1"
 )
 
@@ -34,5 +35,15 @@ func namespaceFields(n *v1.Namespace) logrus.Fields {
 	return logrus.Fields{
 		"namespace":           n.Name,
 		"namespace.permitted": n.GetAnnotations()[AnnotationPermittedKey],
+	}
+}
+
+func IamRoleFields(iamRole *v1alpha1.IamRole) logrus.Fields {
+	return logrus.Fields{
+		"iamRole.namespace":       iamRole.ObjectMeta.Namespace,
+		"iamRole.name":            iamRole.ObjectMeta.Name,
+		"iamRole.iam.role":        iamRole.Definition.RoleArn,
+		"resource.version":   	   iamRole.ObjectMeta.ResourceVersion,
+		"generation.metadata": 	   iamRole.ObjectMeta.Generation,
 	}
 }
