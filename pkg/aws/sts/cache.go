@@ -105,8 +105,8 @@ func (c *credentialsCache) CredentialsForRole(ctx context.Context, role string) 
 	item, found := c.cache.Get(role)
 
 	if found {
-		future, _ := item.(*future.Future)
-		val, err := future.Get(ctx)
+		f, _ := item.(*future.Future)
+		val, err := f.Get(ctx)
 
 		if err != nil {
 			logger.Errorf("error retrieving credentials in cache from future: %s. will delete", err.Error())
