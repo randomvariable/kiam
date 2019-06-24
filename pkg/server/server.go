@@ -237,9 +237,9 @@ func NewServer(config *Config) (*KiamServer, error) {
 
 	iamClient, err := iamV1alpha1client.NewClient(config.KubeConfig)
 
-	server.pods = k8s.NewPodCache(k8s.NewCoreV1ListWatch(client, k8s.ResourcePods), config.PodSyncInterval, config.PrefetchBufferSize)
-	server.namespaces = k8s.NewNamespaceCache(k8s.NewCoreV1ListWatch(client, k8s.ResourceNamespaces), time.Minute)
-	server.iamRoles = k8s.NewIamRoleCache(k8s.NewIamV1Alpha1ListWatch(iamClient, k8s.ResourceIamRoles), config.PodSyncInterval, config.PrefetchBufferSize)
+	server.pods = k8s.NewPodCache(k8s.NewCoreV1ListWatch(client, k8s.ResourcePods), config.KubeConfig, config.PodSyncInterval, config.PrefetchBufferSize)
+	server.namespaces = k8s.NewNamespaceCache(k8s.NewCoreV1ListWatch(client, config.KubeConfig, k8s.ResourceNamespaces), time.Minute)
+	server.iamRoles = k8s.NewIamRoleCache(k8s.NewIamV1Alpha1ListWatch(iamClient, config.KubeConfig, k8s.ResourceIamRoles), config.PodSyncInterval, config.PrefetchBufferSize)
 	server.eventRecorder = eventRecorder(client)
 
 	stsGateway, err := sts.DefaultGateway(config.AssumeRoleArn, config.Region)
