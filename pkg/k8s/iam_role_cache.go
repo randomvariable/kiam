@@ -18,31 +18,48 @@ import (
 	"fmt"
 	"time"
 
+	"sort"
+	"strings"
+
 	log "github.com/sirupsen/logrus"
 	"github.com/uswitch/kiam/pkg/apis/iam/v1alpha1"
+	iamV1alpha1client "github.com/uswitch/kiam/pkg/k8s/client/clientset_generated/clientset"
+	informers "github.com/uswitch/kiam/pkg/k8s/client/informers_generated/externalversions"
+	v1alpha1Listers "github.com/uswitch/kiam/pkg/k8s/client/listers_generated/iam/v1alpha1"
+	authv1 "k8s.io/api/authorization/v1"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 )
 
 // IamRoleCache implements a cache, allowing lookups by their IP address
 type IamRoleCache struct {
-	iamRoles       chan *v1alpha1.IamRole
-	indexer    cache.Indexer
-	controller cache.Controller
+	iamRoles     chan *v1alpha1.IamRole
+	informer     cache.SharedIndexInformer
+	lister       v1alpha1Listers.IamRoleLister
+	corev1Client *kubernetes.Clientset
 }
 
 // NewPodCache creates the cache object that uses a watcher to listen for Pod events. The cache indexes pods by their
 // IP address so that Kiam can identify which role a Pod should assume. It periodically syncs the list of
 // pods and can announce Pods. When announcing Pods via the channel it will drop events if the buffer
 // is full- bufferSize determines how many.
-func NewIamRoleCache(source cache.ListerWatcher, syncInterval time.Duration, bufferSize int) *IamRoleCache {
-	indexers := cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}
-	iamRoles := make(chan *v1alpha1.IamRole, bufferSize)
-	iamRoleHandler := &iamRoleHandler{iamRoles: iamRoles}
-	indexer, controller := cache.NewIndexerInformer(source, &v1alpha1.IamRole{}, syncInterval, iamRoleHandler, indexers)
+func NewIamRoleCache(client iamV1alpha1client.Interface, corev1Client *kubernetes.Clientset, syncInterval time.Duration, bufferSize int) *IamRoleCache {
+	informerFactory := informers.NewSharedInformerFactory(client, syncInterval)
+	informer := informerFactory.Iam().V1alpha1().IamRoles().Informer()
+	lister := informerFactory.Iam().V1alpha1().IamRoles().Lister()
+
+	informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    OnAdd,
+		DeleteFunc: OnDelete,
+		UpdateFunc: OnUpdate,
+	})
+
 	iamRoleCache := &IamRoleCache{
-		iamRoles:   iamRoles,
-		indexer:    indexer,
-		controller: controller,
+		informer:     informer,
+		lister:       lister,
+		corev1Client: corev1Client,
 	}
 
 	return iamRoleCache
@@ -50,7 +67,7 @@ func NewIamRoleCache(source cache.ListerWatcher, syncInterval time.Duration, buf
 
 // FindIamRole finds the IAM role by it's namespace and name
 func (c *IamRoleCache) FindIamRole(ctx context.Context, namespace string, name string) (*v1alpha1.IamRole, error) {
-	obj, exists, err := c.indexer.GetByKey(name)
+	obj, exists, err := c.informer.GetIndexer().GetByKey(name)
 	if err != nil {
 		return nil, err
 	}
@@ -60,12 +77,6 @@ func (c *IamRoleCache) FindIamRole(ctx context.Context, namespace string, name s
 	return obj.(*v1alpha1.IamRole), nil
 }
 
-// IamRoles can be used to watch roles as they're added to the cache, part
-// of the RoleAnnouncer interface
-func (s *IamRoleCache) IamRoles() <-chan *v1alpha1.IamRole {
-	return s.iamRoles
-}
-
 var (
 	// ErrPodNotFound is returned when there's no matching Pod in the cache.
 	ErrRoleNotFound = fmt.Errorf("role not found")
@@ -73,10 +84,10 @@ var (
 
 // Run starts the controller processing updates. Blocks until the cache has synced
 func (s *IamRoleCache) Run(ctx context.Context) error {
-	go s.controller.Run(ctx.Done())
+	go s.informer.Run(ctx.Done())
 	log.Infof("started cache controller")
 
-	ok := cache.WaitForCacheSync(ctx.Done(), s.controller.HasSynced)
+	ok := cache.WaitForCacheSync(ctx.Done(), s.informer.HasSynced)
 	if !ok {
 		return ErrWaitingForSync
 	}
@@ -84,15 +95,97 @@ func (s *IamRoleCache) Run(ctx context.Context) error {
 	return nil
 }
 
-type iamRoleHandler struct {
-	iamRoles chan<- *v1alpha1.IamRole
+// computeSecurityContext derives a valid security context while trying to avoid any changes to the given pod. I.e.
+// if there is a matching policy with the same security context as given, it will be reused. If there is no
+// matching policy the returned pod will be nil and the pspName empty. validatedPSPHint is the validated psp name
+// saved in kubernetes.io/psp annotation. This psp is usually the one we are looking for.
+func (i *IamRoleCache) computeIAMRoleForPod(ctx context.Context, pod *v1.Pod) (*v1alpha1.IamRole, error) {
+
+	if len(pod.Spec.ServiceAccountName) == 0 {
+		return nil, nil
+	}
+
+	user := "system:serviceaccount:" + pod.ObjectMeta.Namespace + ":" + pod.Spec.ServiceAccountName
+
+	return i.ComputeIAMRole(ctx, user)
 }
 
-func (o *iamRoleHandler) announce(iamRole *v1alpha1.IamRole) {
-	return
+// PodRole returns the IAM role specified in the annotation for the Pod
+func (i *IamRoleCache) PodRole(pod *v1.Pod) *v1alpha1.IamRole {
+	if roleArn, ok := pod.ObjectMeta.Annotations[AnnotationIAMRoleKey]; ok {
+		return &v1alpha1.IamRole{
+			Definition: v1alpha1.IamRoleDefinition{
+				RoleArn: roleArn,
+			},
+		}
+	}
+
+	role, err := i.computeIAMRoleForPod(context.TODO(), pod)
+	if err != nil {
+		return nil
+	}
+	return role
 }
 
-func (o *iamRoleHandler) OnAdd(obj interface{}) {
+func (c *IamRoleCache) ComputeIAMRole(ctx context.Context, user string) (*v1alpha1.IamRole, error) {
+
+	iamRoles, err := c.lister.List(labels.Everything())
+
+	if err != nil {
+		return nil, err
+	}
+
+	// return if no IAM roles match
+	if len(iamRoles) == 0 {
+		return nil, nil
+	}
+
+	// order results by alphabetical order
+	sort.SliceStable(iamRoles, func(i, j int) bool {
+
+		return strings.Compare(iamRoles[i].Name, iamRoles[j].Name) < 0
+	})
+
+	for _, iamRole := range iamRoles {
+		if !c.isAuthorizedForRole(ctx, user, iamRole.GetNamespace(), iamRole.Name) {
+			continue
+		}
+		return iamRole, nil
+	}
+
+	return nil, nil
+
+}
+
+func (c *IamRoleCache) isAuthorizedForRole(ctx context.Context, sa string, namespace, roleName string) bool {
+	if len(sa) == 0 {
+		return false
+	}
+	sar := &authv1.SubjectAccessReview{
+		Spec: authv1.SubjectAccessReviewSpec{
+			UID: sa,
+			ResourceAttributes: &authv1.ResourceAttributes{
+				Namespace: namespace,
+				Verb:      "use",
+				Group:     "iam.amazonaws.com",
+				Version:   "v1alpha1",
+				Resource:  "IamRole",
+				Name:      roleName,
+			},
+		},
+	}
+
+	res, err := c.corev1Client.Authorization().SubjectAccessReviews().Create(sar)
+
+	if err != nil {
+		log.Errorf("Unexpected error performing subject access review: %+v", err)
+		return false
+	}
+
+	return res.Status.Allowed
+}
+
+func OnAdd(obj interface{}) {
 	iamRole, isIamRole := obj.(*v1alpha1.IamRole)
 	if !isIamRole {
 		log.Errorf("OnAdd unexpected object: %+v", obj)
@@ -100,10 +193,9 @@ func (o *iamRoleHandler) OnAdd(obj interface{}) {
 	}
 	log.WithFields(IamRoleFields(iamRole)).Debugf("added role")
 
-	o.announce(iamRole)
 }
 
-func (o *iamRoleHandler) OnDelete(obj interface{}) {
+func OnDelete(obj interface{}) {
 	iamRole, isIamRole := obj.(*v1alpha1.IamRole)
 	if !isIamRole {
 		deletedObj, isDeleted := obj.(cache.DeletedFinalStateUnknown)
@@ -124,7 +216,7 @@ func (o *iamRoleHandler) OnDelete(obj interface{}) {
 	return
 }
 
-func (o *iamRoleHandler) OnUpdate(old, new interface{}) {
+func OnUpdate(old, new interface{}) {
 	iamRole, isIamRole := old.(*v1alpha1.IamRole)
 	if !isIamRole {
 		log.Errorf("OnUpdate unexpected object: %+v", new)

@@ -112,7 +112,14 @@ func (p *RequestingAnnotatedRolePolicy) IsAllowedAssumeRole(ctx context.Context,
 		return nil, err
 	}
 
-	annotatedRole := p.resolver.Resolve(k8s.PodRole(pod))
+	resolvedRole, err := p.pods.GetRoleForPod(pod)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: Logic change here
+	annotatedRole := p.resolver.Resolve(resolvedRole)
 	role = p.resolver.Resolve(role)
 
 	if annotatedRole != role {

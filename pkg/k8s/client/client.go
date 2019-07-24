@@ -1,9 +1,9 @@
 package client
 
 import (
+	iamV1alpha1 "github.com/uswitch/kiam/pkg/k8s/client/clientset_generated/clientset"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
-	iamV1alpha1 "github.com/uswitch/kiam/pkg/k8s/client/clientset_generated/clientset"
 )
 
 // NewClient returns an in-cluster or out of cluster clientset depending on

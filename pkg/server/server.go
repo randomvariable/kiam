@@ -28,6 +28,7 @@ import (
 	"github.com/uswitch/k8sc/official"
 	"github.com/uswitch/kiam/pkg/aws/sts"
 	"github.com/uswitch/kiam/pkg/k8s"
+	iamV1alpha1client "github.com/uswitch/kiam/pkg/k8s/client"
 	"github.com/uswitch/kiam/pkg/prefetch"
 	"github.com/uswitch/kiam/pkg/statsd"
 	pb "github.com/uswitch/kiam/proto"
@@ -39,7 +40,6 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	typedcorev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/record"
-	iamV1alpha1client "github.com/uswitch/kiam/pkg/k8s/client"
 )
 
 // +kubebuilder:rbac:groups=iam.amazonaws.com,resources=roles,verbs=get;list;watch
@@ -76,7 +76,7 @@ type KiamServer struct {
 	server              *grpc.Server
 	pods                *k8s.PodCache
 	namespaces          *k8s.NamespaceCache
-	iamRoles 			*k8s.IamRoleCache
+	iamRoles            *k8s.IamRoleCache
 	eventRecorder       record.EventRecorder
 	manager             *prefetch.CredentialManager
 	credentialsProvider sts.CredentialsProvider
@@ -170,10 +170,10 @@ func (k *KiamServer) GetPodRole(ctx context.Context, req *pb.GetPodRoleRequest) 
 		return nil, err
 	}
 
-	role := k8s.PodRole(pod)
+	role := k.iamRoles.PodRole(pod)
 
-	logger.WithField("pod.iam.role", role).Infof("found role")
-	return &pb.Role{Name: role}, nil
+	logger.WithField("pod.iam.role", role.LookupID()).Infof("found role")
+	return &pb.Role{Name: role.LookupID()}, nil
 }
 
 func translateCredentialsToProto(credentials *sts.Credentials) *pb.Credentials {
@@ -236,10 +236,9 @@ func NewServer(config *Config) (*KiamServer, error) {
 	}
 
 	iamClient, err := iamV1alpha1client.NewClient(config.KubeConfig)
-
-	server.pods = k8s.NewPodCache(k8s.NewCoreV1ListWatch(client, k8s.ResourcePods), config.KubeConfig, config.PodSyncInterval, config.PrefetchBufferSize)
-	server.namespaces = k8s.NewNamespaceCache(k8s.NewCoreV1ListWatch(client, config.KubeConfig, k8s.ResourceNamespaces), time.Minute)
-	server.iamRoles = k8s.NewIamRoleCache(k8s.NewIamV1Alpha1ListWatch(iamClient, config.KubeConfig, k8s.ResourceIamRoles), config.PodSyncInterval, config.PrefetchBufferSize)
+	server.iamRoles = k8s.NewIamRoleCache(iamClient, client, config.PodSyncInterval, config.PrefetchBufferSize)
+	server.pods = k8s.NewPodCache(k8s.NewCoreV1ListWatch(client, k8s.ResourcePods), server.iamRoles, config.PodSyncInterval, config.PrefetchBufferSize)
+	server.namespaces = k8s.NewNamespaceCache(k8s.NewCoreV1ListWatch(client, k8s.ResourceNamespaces), time.Minute)
 	server.eventRecorder = eventRecorder(client)
 
 	stsGateway, err := sts.DefaultGateway(config.AssumeRoleArn, config.Region)
@@ -300,6 +299,10 @@ func (k *KiamServer) Serve(ctx context.Context) {
 	err = k.namespaces.Run(ctx)
 	if err != nil {
 		log.Fatalf("error starting namespace cache: %s", err)
+	}
+	err = k.iamRoles.Run(ctx)
+	if err != nil {
+		log.Fatalf("error starting IAM roles cache: %s", err)
 	}
 	k.server.Serve(k.listener)
 }

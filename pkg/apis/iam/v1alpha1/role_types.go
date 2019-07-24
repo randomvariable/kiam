@@ -50,6 +50,13 @@ type IamRoleList struct {
 	Items           []IamRole `json:"items"`
 }
 
+func (i *IamRole) LookupID() string {
+	if i.Definition.ExternalId == nil {
+		return i.Definition.RoleArn
+	}
+	return i.Definition.RoleArn + "/" + *i.Definition.ExternalId
+}
+
 func init() {
 	SchemeBuilder.Register(&IamRole{})
 }

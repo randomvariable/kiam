@@ -20,6 +20,7 @@ import (
 	"github.com/uswitch/kiam/pkg/statsd"
 	"github.com/uswitch/kiam/pkg/testutil"
 	kt "k8s.io/client-go/tools/cache/testing"
+	"k8s.io/client-go/kubernetes/fake"
 	"testing"
 	"time"
 )
@@ -35,9 +36,9 @@ func TestFindsRunningPod(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	source := kt.NewFakeControllerSource()
-	c := NewPodCache(source, time.Second, bufferSize)
+	iamRoleCache := NewIamRoleCache(fake.NewSimpleClientset(), fake.NewSimpleClientset(), time.Second, bufferSize)
+	c := NewPodCache(source, iamRoleCache, time.Second, bufferSize)
 	source.Add(testutil.NewPodWithRole("ns", "name", "192.168.0.1", "Failed", "failed_role"))
 	source.Add(testutil.NewPodWithRole("ns", "name", "192.168.0.1", "Running", "running_role"))
 	c.Run(ctx)
@@ -59,7 +60,8 @@ func TestFindRoleActive(t *testing.T) {
 	defer cancel()
 
 	source := kt.NewFakeControllerSource()
-	c := NewPodCache(source, time.Second, bufferSize)
+	iamRoleCache := NewIamRoleCache(fake.NewSimpleClientset(), fake.NewSimpleClientset(), time.Second, bufferSize)
+	c := NewPodCache(source, iamRoleCache, time.Second, bufferSize)
 	source.Add(testutil.NewPodWithRole("ns", "name", "192.168.0.1", "Failed", "failed_role"))
 	source.Modify(testutil.NewPodWithRole("ns", "name", "192.168.0.1", "Failed", "running_role"))
 	source.Modify(testutil.NewPodWithRole("ns", "name", "192.168.0.1", "Running", "running_role"))
@@ -84,7 +86,8 @@ func BenchmarkFindPodsByIP(b *testing.B) {
 	defer cancel()
 
 	source := kt.NewFakeControllerSource()
-	c := NewPodCache(source, time.Second, bufferSize)
+	iamRoleCache := NewIamRoleCache(fake.NewSimpleClientset(), fake.NewSimpleClientset(), time.Second, bufferSize)
+	c := NewPodCache(source, iamRoleCache, time.Second, bufferSize)
 	for i := 0; i < 1000; i++ {
 		source.Add(testutil.NewPodWithRole("ns", fmt.Sprintf("name-%d", i), fmt.Sprintf("ip-%d", i), "Running", "foo_role"))
 	}
@@ -111,7 +114,8 @@ func BenchmarkIsActiveRole(b *testing.B) {
 		role := i % 100
 		source.Add(testutil.NewPodWithRole("ns", fmt.Sprintf("name-%d", i), fmt.Sprintf("ip-%d", i), "Running", fmt.Sprintf("role-%d", role)))
 	}
-	c := NewPodCache(source, time.Second, bufferSize)
+	iamRoleCache := NewIamRoleCache(fake.NewSimpleClientset(), fake.NewSimpleClientset(), time.Second, bufferSize)
+	c := NewPodCache(source, iamRoleCache, time.Second, bufferSize)
 	c.Run(ctx)
 
 	b.StartTimer()

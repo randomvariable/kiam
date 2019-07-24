@@ -3,6 +3,9 @@ package server
 import (
 	"context"
 	"fmt"
+	"testing"
+	"time"
+
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/fortytw2/leaktest"
 	"github.com/uswitch/kiam/pkg/aws/sts"
@@ -10,9 +13,9 @@ import (
 	"github.com/uswitch/kiam/pkg/statsd"
 	"github.com/uswitch/kiam/pkg/testutil"
 	pb "github.com/uswitch/kiam/proto"
+	"k8s.io/client-go/kubernetes/fake"
+	fakeclient "github.com/uswitch/kiam/pkg/k8s/client/clientset_generated/clientset/fake"
 	kt "k8s.io/client-go/tools/cache/testing"
-	"testing"
-	"time"
 )
 
 const (
@@ -43,7 +46,9 @@ func TestReturnsErrorWhenPodNotFound(t *testing.T) {
 	source := kt.NewFakeControllerSource()
 	defer source.Shutdown()
 
-	podCache := k8s.NewPodCache(source, time.Second, defaultBuffer)
+	iamRoleCache := k8s.NewIamRoleCache(fakeclient.NewSimpleClientset(), fake.NewSimpleClientset(), time.Second, bufferSize)
+
+	podCache := k8s.NewPodCache(source, iamRoleCache, time.Second, defaultBuffer)
 	server := &KiamServer{pods: podCache}
 
 	_, err := server.GetPodCredentials(context.Background(), &pb.GetPodCredentialsRequest{})
@@ -84,7 +89,9 @@ func TestReturnsCredentials(t *testing.T) {
 	defer source.Shutdown()
 	source.Add(testutil.NewPodWithRole("ns", "name", "192.168.0.1", "Running", "running_role"))
 
-	podCache := k8s.NewPodCache(source, time.Second, defaultBuffer)
+	iamRoleCache := k8s.NewIamRoleCache(*fakeclient.NewSimpleClientset(), fake.NewSimpleClientset(), time.Second, defaultBufferSize)
+	podCache := NewPodCache(source, iamRoleCache, time.Second, defaultBuffer)
+
 	podCache.Run(ctx)
 	server := &KiamServer{pods: podCache, assumePolicy: &allowPolicy{}, credentialsProvider: &stubCredentialsProvider{accessKey: "A1234"}}
 
